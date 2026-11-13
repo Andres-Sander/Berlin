@@ -1,0 +1,1815 @@
+<!DOCTYPE html>
+<html dir="ltr" lang="de"><head>
+  <meta charset="utf-8"/>
+  <meta content="width=device-width, initial-scale=1" name="viewport"/>
+  <meta content="light dark" name="color-scheme"/>
+  <title>Glücks-Timer</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #eef3f8;
+      --surface: #ffffff;
+      --surface-soft: #f6f8fb;
+      --text: #162334;
+      --muted: #5c6b7c;
+      --line: #d8e1ea;
+      --focus: #ffb000;
+      --work: #087f5b;
+      --between: #f28c00;
+      --done: #1769aa;
+      --ring-track: #dce5ed;
+      --shadow: 0 18px 55px rgba(25, 49, 75, .13);
+    }
+    * { box-sizing: border-box; }
+    body {
+      min-block-size: 100vh;
+      margin: 0;
+      padding: 0;
+      background: radial-gradient(circle at top, #ffffff 0, var(--bg) 58%);
+      color: var(--text);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    main {
+      position: relative;
+      inline-size: 100%;
+      min-block-size: 100vh;
+      display: grid;
+      grid-template-rows: auto 1fr;
+      background: var(--surface);
+      overflow: hidden;
+    }
+    .bottom-controls {
+      position: absolute;
+      inset-inline-start: 12px;
+      inset-block-end: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      z-index: 3;
+    }
+    .mallard-toggle,
+    .help-toggle,
+    .max-toggle {
+      inline-size: 44px;
+      min-block-size: 40px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      cursor: pointer;
+    }
+    .max-toggle {
+      color: var(--muted);
+      font: 750 .75rem/1 system-ui, sans-serif;
+      letter-spacing: .04em;
+      text-transform: lowercase;
+      opacity: .7;
+    }
+    .max-toggle:hover { opacity: 1; }
+    .max-toggle:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+    .mallard-toggle {
+      transition: opacity .15s ease, filter .15s ease;
+    }
+    .mallard-toggle svg {
+      display: block;
+      inline-size: 42px;
+      block-size: 36px;
+      transform: rotate(0deg);
+      transform-origin: center;
+    }
+    .mallard-toggle[aria-pressed="false"] {
+      opacity: .3;
+      filter: grayscale(1);
+    }
+    .mallard-toggle:not(.has-audio) { opacity: .52; }
+    .mallard-toggle:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+    .sound-ring-outer { fill: none; stroke: #176447; stroke-width: 5; }
+    .sound-ring-inner { fill: none; stroke: #e6a12a; stroke-width: 5; }
+    .help-toggle {
+      opacity: .64;
+      transition: opacity .15s ease;
+    }
+    .help-toggle:hover { opacity: 1; }
+    .help-letter {
+      display: inline-block;
+      color: var(--text);
+      font: 750 28px/38px system-ui, sans-serif;
+    }
+    .help-toggle:focus-visible,
+    .help-dialog button:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+    .help-dialog {
+      inline-size: min(92vw, 680px);
+      max-block-size: min(86vh, 760px);
+      padding: 0;
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: var(--surface);
+      color: var(--text);
+      box-shadow: var(--shadow);
+    }
+    .help-dialog::backdrop { background: rgba(10, 20, 30, .58); }
+    .help-dialog-inner {
+      position: relative;
+      padding: 28px clamp(22px, 5vw, 42px) 34px;
+      overflow: auto;
+      max-block-size: min(86vh, 760px);
+    }
+    .help-dialog h2 { margin: 0 42px 18px 0; font-size: 1.65rem; }
+    .help-dialog h3 { margin: 22px 0 7px; font-size: 1.05rem; }
+    .help-dialog p,
+    .help-dialog li { line-height: 1.5; }
+    .help-dialog ul { margin: 7px 0 0; padding-inline-start: 22px; }
+    .help-dialog code {
+      padding: 2px 5px;
+      border-radius: 5px;
+      background: var(--surface-soft);
+      font: inherit;
+      font-weight: 750;
+    }
+    .help-close {
+      position: absolute;
+      inset-block-start: 18px;
+      inset-inline-end: 18px;
+      inline-size: 34px;
+      min-block-size: 34px;
+      padding: 0;
+      border: 0;
+      border-radius: 50%;
+      background: var(--surface-soft);
+      color: var(--text);
+      font-size: 1.3rem;
+      cursor: pointer;
+    }
+    .visually-hidden {
+      position: absolute;
+      inline-size: 1px;
+      block-size: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+      border: 0;
+    }
+    header {
+      padding: clamp(14px, 2vw, 22px) clamp(22px, 5vw, 52px) 4px;
+      text-align: center;
+    }
+    h1 {
+      margin: 0;
+      border-radius: 8px;
+      font-size: clamp(2rem, 6vw, 3.5rem);
+      letter-spacing: -.04em;
+      cursor: default;
+    }
+    h1.is-editable { cursor: text; }
+    h1[contenteditable="true"] {
+      outline: 2px solid var(--focus);
+      outline-offset: 4px;
+    }
+    .layout {
+      display: grid;
+      place-items: center;
+      padding: 10px clamp(22px, 4vw, 44px) clamp(18px, 3vw, 30px);
+      min-block-size: 0;
+    }
+    .config-summary,
+    .config-editor,
+    .config-colors-nav {
+      inline-size: min(100%, 540px);
+      margin: 8px auto 0;
+      align-items: center;
+      gap: 10px;
+    }
+    .config-summary {
+      display: grid;
+      grid-template-columns: 34px 1fr 34px;
+    }
+    .config-summary::before { content: ""; }
+    .config-editor {
+      display: grid;
+      grid-template-columns: 34px 1fr 34px;
+    }
+    .config-colors-nav {
+      display: grid;
+      grid-template-columns: 34px 1fr 34px;
+    }
+    .config-colors-nav::after { content: ""; }
+    .config-editor[hidden],
+    .config-colors-nav[hidden],
+    .config-summary[hidden] { display: none; }
+    .config-heading {
+      margin: 0;
+      color: var(--muted);
+      font-size: 1.05rem;
+      font-weight: 650;
+      text-align: center;
+    }
+    label { display: grid; }
+    input {
+      inline-size: 100%;
+      min-block-size: 44px;
+      padding: 10px 14px;
+      border: 1px solid #aebdca;
+      border-radius: 11px;
+      background: var(--surface);
+      color: var(--text);
+      font: inherit;
+      font-size: 1.08rem;
+      font-weight: 700;
+    }
+    #time-sequence {
+      min-block-size: 58px;
+      font-size: 1.15rem;
+      letter-spacing: .03em;
+      text-align: center;
+    }
+    input:disabled { opacity: .65; cursor: not-allowed; }
+    input:focus-visible, button:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+    .sheet-arrow {
+      position: relative;
+      inline-size: 34px;
+      min-block-size: 34px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: #8a949e;
+      cursor: pointer;
+      transition: color .15s ease;
+    }
+    .sheet-arrow::before {
+      content: "";
+      position: absolute;
+      inset-block-start: 50%;
+      inline-size: 11px;
+      block-size: 11px;
+      border-block-start: 1.5px solid currentColor;
+      border-inline-end: 1.5px solid currentColor;
+    }
+    .sheet-arrow.next::before {
+      inset-inline-start: 10px;
+      transform: translateY(-50%) rotate(45deg);
+    }
+    .sheet-arrow.back::before {
+      inset-inline-start: 13px;
+      transform: translateY(-50%) rotate(-135deg);
+    }
+    .sheet-arrow:hover:not(:disabled) { color: var(--muted); }
+    .sheet-arrow:disabled { opacity: .45; cursor: not-allowed; }
+    .visual { display: grid; place-items: center; }
+    .view-stage {
+      position: relative;
+      inline-size: 100%;
+      max-inline-size: 100%;
+      display: grid;
+      place-items: center;
+      overflow: auto;
+    }
+    .view-stage[hidden] { display: none; }
+    main.max-mode {
+      grid-template-rows: 1fr;
+    }
+    main.max-mode > header { display: none; }
+    main.max-mode .layout {
+      padding: 24px;
+      overflow: auto;
+    }
+    main.max-mode #overall-view {
+      display: grid;
+      min-inline-size: 350px;
+      min-block-size: 350px;
+    }
+    main.max-mode .dial {
+      inline-size: max(350px, min(calc(100vw - 48px), calc(100vh - 48px)));
+      min-inline-size: 350px;
+    }
+    main.max-mode .track,
+    main.max-mode .progress { stroke-width: 44; r: 94px; }
+    main.max-mode .overall-track,
+    main.max-mode .overall-segment,
+    main.max-mode .overall-elapsed { stroke-width: 14; }
+    main.max-mode .phase-seek-hit { stroke-width: 50; r: 94px; }
+    main.max-mode .overall-seek-hit { stroke-width: 22; }
+    main.max-mode .center { inset: 26%; }
+    main.max-mode .progress.is-pulsing,
+    main.max-mode .progress.is-counting-pulse,
+    main.max-mode .track.is-counting-pulse {
+      animation: max-ring-pulse 1.7s ease-in-out infinite;
+    }
+    @keyframes max-ring-pulse {
+      0%, 100% { opacity: .5; stroke-width: 40; }
+      50% { opacity: 1; stroke-width: 48; }
+    }
+    .dial {
+      position: relative;
+      inline-size: 350px;
+      min-inline-size: 350px;
+      aspect-ratio: 1;
+      border-radius: 50%;
+      user-select: none;
+    }
+    svg { display: block; inline-size: 100%; block-size: 100%; transform: rotate(-90deg); }
+    .track, .progress, .overall-track, .overall-segment, .overall-elapsed { fill: none; }
+    .track, .progress { stroke-width: 22; }
+    .track { stroke: var(--ring-track); }
+    .overall-track, .overall-segment, .overall-elapsed { stroke-width: 7; }
+    .overall-track { stroke: var(--ring-track); }
+    .overall-segment {
+      stroke-linecap: butt;
+    }
+    .overall-elapsed {
+      stroke: var(--ring-track);
+      stroke-linecap: butt;
+      stroke-dasharray: 0 100;
+      transition: stroke-dasharray .12s linear;
+    }
+    .progress {
+      stroke: var(--work);
+      stroke-linecap: round;
+      stroke-dasharray: 100;
+      stroke-dashoffset: 0;
+      transition: stroke .25s ease, stroke-dashoffset .12s linear;
+    }
+    .seek-hit {
+      fill: none;
+      stroke: transparent;
+      pointer-events: stroke;
+      cursor: default;
+      touch-action: manipulation;
+    }
+    .seek-hit.can-seek { cursor: pointer; }
+    .phase-seek-hit { stroke-width: 26; }
+    .overall-seek-hit { stroke-width: 14; }
+    .progress.is-pulsing {
+      stroke-dashoffset: 0 !important;
+      animation: ring-pulse 2.2s ease-in-out infinite;
+    }
+    .progress.is-counting-pulse {
+      animation: ring-pulse 1.7s ease-in-out infinite;
+    }
+    .track.is-counting-pulse {
+      animation: ring-pulse 1.7s ease-in-out infinite;
+    }
+    @keyframes ring-pulse {
+      0%, 100% { opacity: .45; stroke-width: 18; }
+      50% { opacity: 1; stroke-width: 25; }
+    }
+    .center {
+      position: absolute;
+      inset: 17%;
+      text-align: center;
+      border-radius: 50%;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      box-shadow: inset 0 0 0 8px var(--surface-soft);
+      cursor: pointer;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .center:focus-visible { outline: 4px solid var(--focus); outline-offset: 5px; }
+    .phase {
+      position: absolute;
+      inset-block-start: 16%;
+      inset-inline: 8%;
+      margin: 0;
+      color: var(--muted);
+      font-size: clamp(.82rem, 2vw, 1rem);
+      font-weight: 750;
+      text-transform: uppercase;
+      letter-spacing: .1em;
+    }
+    .seconds {
+      position: absolute;
+      inset-block-start: 50%;
+      inset-inline-start: 50%;
+      transform: translate(-50%, -50%);
+      margin: 0;
+      font-variant-numeric: tabular-nums;
+      font-size: 6rem;
+      font-weight: 800;
+      letter-spacing: -.07em;
+      line-height: .95;
+      white-space: nowrap;
+    }
+    .seconds.digits-3 { font-size: 5.5rem; }
+    .seconds.digits-4 { font-size: 4.25rem; }
+    .seconds.digits-5-plus { font-size: 3.35rem; }
+    .seconds-label {
+      position: absolute;
+      inset-block-start: 78%;
+      inset-inline: 0;
+      margin: 0;
+      color: var(--muted);
+    }
+    .watermark {
+      position: absolute;
+      inset-block-start: 71%;
+      inset-inline: 0;
+      margin: 0;
+      color: var(--text);
+      font-size: 8pt;
+      font-weight: 750;
+      letter-spacing: .08em;
+      opacity: .02;
+      white-space: nowrap;
+      pointer-events: none;
+      user-select: none;
+    }
+    .timer-discs {
+      inline-size: 100%;
+      max-block-size: calc(100vh - 180px);
+      padding: 8px 42px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, 173px);
+      justify-content: center;
+      gap: 8px;
+      overflow: auto;
+      scrollbar-gutter: stable;
+    }
+    .timer-disc {
+      min-inline-size: 0;
+      display: grid;
+      place-items: center;
+    }
+    .timer-disc.is-complete { opacity: .42; }
+    .timer-disc-graphic {
+      position: relative;
+      inline-size: 173px;
+      min-inline-size: 173px;
+      aspect-ratio: 1;
+    }
+    .timer-disc svg {
+      inline-size: 100%;
+      block-size: 100%;
+      transform: rotate(-90deg);
+    }
+    .timer-disc-track,
+    .timer-disc-progress,
+    .timer-disc-overall-track,
+    .timer-disc-overall-progress,
+    .timer-disc-hit {
+      fill: none;
+    }
+    .timer-disc-track,
+    .timer-disc-progress { stroke-width: 12; }
+    .timer-disc-overall-track,
+    .timer-disc-overall-progress { stroke-width: 4; }
+    .timer-disc-track,
+    .timer-disc-overall-track { stroke: var(--ring-track); }
+    .timer-disc-progress {
+      stroke-linecap: round;
+      stroke-dasharray: 100;
+      stroke-dashoffset: 0;
+      transition: stroke-dashoffset .12s linear;
+    }
+    .timer-disc-progress.is-pulsing,
+    .timer-disc-track.is-pulsing {
+      animation: timer-disc-pulse 1.7s ease-in-out infinite;
+    }
+    @keyframes timer-disc-pulse {
+      0%, 100% { opacity: .48; stroke-width: 10; }
+      50% { opacity: 1; stroke-width: 15; }
+    }
+    .timer-disc-overall-progress {
+      stroke: var(--done);
+      stroke-linecap: butt;
+      stroke-dasharray: 100;
+      stroke-dashoffset: var(--disc-overall-offset, 0);
+      transition: stroke-dashoffset .12s linear;
+    }
+    .timer-disc-hit {
+      stroke: transparent;
+      pointer-events: stroke;
+      cursor: default;
+      touch-action: manipulation;
+    }
+    .timer-disc-hit.can-seek { cursor: pointer; }
+    .timer-disc-phase-hit { stroke-width: 22; }
+    .timer-disc-overall-hit { stroke-width: 11; }
+    .timer-disc-center {
+      position: absolute;
+      inset: 23%;
+      display: grid;
+      place-content: center;
+      gap: 2px;
+      border: 1px solid var(--line);
+      border-radius: 50%;
+      background: var(--surface);
+      color: var(--text);
+      text-align: center;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+    .timer-disc-center:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+    .timer-disc-label {
+      color: var(--muted);
+      font-size: .66rem;
+      font-weight: 750;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+    .timer-disc-value {
+      font-size: 1.45rem;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+    }
+    .timer-disc-value[contenteditable="true"] {
+      min-inline-size: 2.2em;
+      padding: 2px 4px;
+      border-radius: 5px;
+      outline: 2px solid var(--focus);
+      background: var(--surface-soft);
+      cursor: text;
+    }
+    .timer-disc-unit { color: var(--muted); font-size: .62rem; }
+    .color-discs {
+      inline-size: 100%;
+      max-block-size: calc(100vh - 180px);
+      padding: 8px 34px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, 212px);
+      justify-content: center;
+      gap: 8px;
+      overflow: auto;
+      scrollbar-gutter: stable;
+    }
+    .color-card {
+      display: grid;
+      grid-template-columns: minmax(0, 173px);
+      grid-template-rows: 30px auto;
+      align-items: center;
+      justify-items: center;
+      justify-content: center;
+      gap: 5px;
+    }
+    .color-disc-graphic {
+      position: relative;
+      inline-size: 173px;
+      min-inline-size: 173px;
+      aspect-ratio: 1;
+    }
+    .color-disc-graphic svg {
+      inline-size: 100%;
+      block-size: 100%;
+      transform: rotate(-90deg);
+    }
+    .color-disc-track,
+    .color-disc-ring,
+    .color-disc-outer {
+      fill: none;
+    }
+    .color-disc-track,
+    .color-disc-ring { stroke-width: 12; }
+    .color-disc-track { stroke: var(--ring-track); }
+    .color-disc-ring { stroke-linecap: round; }
+    .color-disc-outer { stroke: var(--done); stroke-width: 4; }
+    .color-disc-center {
+      position: absolute;
+      inset: 23%;
+      display: grid;
+      place-content: center;
+      gap: 2px;
+      border: 1px solid var(--line);
+      border-radius: 50%;
+      background: var(--surface);
+      color: var(--text);
+      text-align: center;
+    }
+    .color-disc-label {
+      color: var(--muted);
+      font-size: .66rem;
+      font-weight: 750;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
+    .color-disc-value {
+      font-size: 1.45rem;
+      font-weight: 800;
+      line-height: 1;
+    }
+    .color-picker {
+      inline-size: 52px;
+      block-size: 28px;
+      padding: 2px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      cursor: pointer;
+    }
+    @media (max-width: 900px) {
+      .layout { overflow: auto; }
+    }
+    @media (max-width: 420px) {
+      .layout { padding: 10px; }
+      .timer-discs {
+        padding-inline: 34px;
+        grid-template-columns: repeat(2, 173px);
+        gap: 8px;
+      }
+      .color-discs {
+        padding-inline: 28px;
+        grid-template-columns: repeat(2, 212px);
+      }
+      .color-card { grid-template-columns: minmax(0, 173px); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
+      .progress.is-pulsing { animation: none; opacity: 1; stroke-width: 22; }
+      .progress.is-counting-pulse { animation: none; opacity: 1; stroke-width: 22; }
+      .track.is-counting-pulse { animation: none; opacity: 1; stroke-width: 22; }
+      .timer-disc-progress.is-pulsing { animation: none; opacity: 1; stroke-width: 12; }
+      .timer-disc-track.is-pulsing { animation: none; opacity: 1; stroke-width: 12; }
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        color-scheme: dark;
+        --bg: #0d1620;
+        --surface: #152230;
+        --surface-soft: #1b2a39;
+        --text: #edf4fa;
+        --muted: #b5c3d0;
+        --line: #314457;
+        --focus: #ffd166;
+        --work: #42c99a;
+        --between: #ff9f1c;
+        --done: #62b5ed;
+        --ring-track: #314457;
+        --shadow: 0 18px 55px rgba(0, 0, 0, .3);
+      }
+      body { background: radial-gradient(circle at top, #223447 0, var(--bg) 58%); }
+      input { border-color: #53687b; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="bottom-controls">
+      <button aria-controls="help-dialog" aria-label="Anleitung öffnen" class="help-toggle" id="help-toggle" title="Anleitung" type="button">
+        <span aria-hidden="true" class="help-letter">T</span>
+      </button>
+      <button aria-label="Timer maximieren" aria-pressed="false" class="max-toggle" id="max-toggle" title="Timer maximieren" type="button">max</button>
+      <button aria-label="Noch keine Audiodatei geladen; doppelklicken zum Auswählen" aria-pressed="true" class="mallard-toggle" id="mallard-toggle" title="Klick: Sound ein/aus · Doppelklick: MP3 oder M4A laden" type="button">
+        <svg aria-hidden="true" focusable="false" viewBox="0 0 64 52">
+          <circle class="sound-ring-outer" cx="32" cy="26" r="21"></circle>
+          <circle class="sound-ring-inner" cx="32" cy="26" r="12"></circle>
+        </svg>
+      </button>
+    </div>
+    <input accept=".mp3,.m4a,audio/mpeg,audio/mp4,audio/x-m4a" class="visually-hidden" id="sound-file" type="file"/>
+    <audio id="timer-sound" preload="auto"></audio>
+    <header>
+      <h1 aria-label="Titel anklicken zum Bearbeiten, doppelklicken zum Speichern als HTML-Datei" class="is-editable" contenteditable="false" id="app-title" spellcheck="false" tabindex="0">Glücks-Timer</h1>
+      <div class="config-summary" id="config-summary">
+        <p class="config-heading">Zeiten in Sekunden</p>
+        <button aria-controls="config-editor" aria-expanded="true" aria-label="Zeiten bearbeiten" class="sheet-arrow next" id="open-editor" type="button"></button>
+      </div>
+      <div class="config-editor" hidden="" id="config-editor">
+        <button aria-controls="config-summary" aria-label="Zurück zur Startansicht" class="sheet-arrow back" id="close-editor" type="button"></button>
+        <label for="time-sequence">
+          <input aria-label="Zeitpaare: Pause-Timer oder einzelne Timerdauer" autocomplete="off" id="time-sequence" inputmode="numeric" spellcheck="false" type="text" value="5-30 30 30 30"/>
+        </label>
+        <button aria-controls="color-view" aria-expanded="false" aria-label="Timerfarben auswählen" class="sheet-arrow next" id="open-colors" type="button"></button>
+      </div>
+      <div class="config-colors-nav" hidden="" id="config-colors-nav">
+        <button aria-controls="config-editor" aria-label="Zurück zum Zeiteditor" class="sheet-arrow back" id="close-colors" type="button"></button>
+        <p class="config-heading">Farbauswahl</p>
+      </div>
+    </header>
+    <section aria-label="Timer" class="layout">
+      <div class="view-stage" id="overall-view">
+        <div class="visual">
+        <div class="dial">
+          <svg aria-hidden="true" viewBox="0 0 280 280">
+            <circle class="overall-track" cx="140" cy="140" r="132"></circle>
+            <g id="overall-segments"></g>
+            <circle class="overall-elapsed" cx="140" cy="140" id="overall-elapsed" pathLength="100" r="132"></circle>
+            <circle class="seek-hit overall-seek-hit" cx="140" cy="140" id="overall-seek-hit" r="132"></circle>
+            <circle class="track" cx="140" cy="140" id="phase-track" r="112"></circle>
+            <circle class="progress" cx="140" cy="140" id="progress" pathLength="100" r="112"></circle>
+            <circle class="seek-hit phase-seek-hit" cx="140" cy="140" id="phase-seek-hit" r="112"></circle>
+          </svg>
+          <div aria-atomic="true" aria-label="Timer steuern: einmal tippen für Start oder Pause, doppelt tippen zum Zurücksetzen" aria-live="polite" class="center" id="live" role="button" tabindex="0">
+            <p class="phase" id="phase">Gesamt Timer</p>
+            <p class="seconds digits-3" id="seconds">120</p>
+            <span aria-hidden="true" class="watermark">Andres Sander</span>
+            <span class="seconds-label">Sekunden</span>
+          </div>
+        </div>
+      </div>
+      </div>
+      <div class="view-stage" hidden="" id="disc-view">
+        <div aria-label="Einzelscheiben der Timer" class="timer-discs" id="timer-discs" style="--disc-overall-offset: 0;"></div>
+      </div>
+      <div class="view-stage" hidden="" id="color-view">
+        <div aria-label="Manuelle Timerfarben" class="color-discs" id="color-discs"><div class="color-card"><input aria-label="Timer 1 Farbe" class="color-picker" data-timer-index="0" type="color"/><div class="color-disc-graphic"><svg aria-hidden="true" viewBox="0 0 120 120"><circle class="color-disc-outer" cx="60" cy="60" r="55"></circle><circle class="color-disc-track" cx="60" cy="60" r="43"></circle><circle class="color-disc-ring" cx="60" cy="60" r="43" style="stroke: rgb(214, 40, 40);"></circle></svg><div class="color-disc-center"><span class="color-disc-label">Timer 1</span><span class="color-disc-value">30</span></div></div></div><div class="color-card"><input aria-label="Timer 2 Farbe" class="color-picker" data-timer-index="1" type="color"/><div class="color-disc-graphic"><svg aria-hidden="true" viewBox="0 0 120 120"><circle class="color-disc-outer" cx="60" cy="60" r="55"></circle><circle class="color-disc-track" cx="60" cy="60" r="43"></circle><circle class="color-disc-ring" cx="60" cy="60" r="43" style="stroke: rgb(242, 201, 76);"></circle></svg><div class="color-disc-center"><span class="color-disc-label">Timer 2</span><span class="color-disc-value">30</span></div></div></div><div class="color-card"><input aria-label="Timer 3 Farbe" class="color-picker" data-timer-index="2" type="color"/><div class="color-disc-graphic"><svg aria-hidden="true" viewBox="0 0 120 120"><circle class="color-disc-outer" cx="60" cy="60" r="55"></circle><circle class="color-disc-track" cx="60" cy="60" r="43"></circle><circle class="color-disc-ring" cx="60" cy="60" r="43" style="stroke: rgb(46, 157, 80);"></circle></svg><div class="color-disc-center"><span class="color-disc-label">Timer 3</span><span class="color-disc-value">30</span></div></div></div><div class="color-card"><input aria-label="Timer 4 Farbe" class="color-picker" data-timer-index="3" type="color"/><div class="color-disc-graphic"><svg aria-hidden="true" viewBox="0 0 120 120"><circle class="color-disc-outer" cx="60" cy="60" r="55"></circle><circle class="color-disc-track" cx="60" cy="60" r="43"></circle><circle class="color-disc-ring" cx="60" cy="60" r="43" style="stroke: rgb(40, 120, 200);"></circle></svg><div class="color-disc-center"><span class="color-disc-label">Timer 4</span><span class="color-disc-value">30</span></div></div></div></div>
+      </div>
+    </section>
+    <input id="timer-color-values" type="hidden" value="#d62828,#f2c94c,#2e9d50,#2878c8"/>
+  </main>
+  <dialog aria-labelledby="help-title" class="help-dialog" id="help-dialog">
+    <div class="help-dialog-inner">
+      <button aria-label="Anleitung schließen" class="help-close" id="help-close" type="button">×</button>
+      <h2 id="help-title">Anleitung zum Glücks-Timer</h2>
+      <p>Der Buchstabe T unten links öffnet diese Anleitung. Die beiden verschiedenfarbigen Ringe bilden den Schalter für den Timer-Sound.</p>
+      <h3>Starten, pausieren und zurücksetzen</h3>
+      <ul>
+        <li>Ein Klick auf die Mitte der großen Scheibe startet, pausiert oder setzt den Timer fort.</li>
+        <li>Ein Doppelklick auf die Mitte setzt den Ablauf auf den Anfang zurück, ohne ihn neu zu starten.</li>
+        <li>Die Mitte ist auch mit Tab erreichbar; Enter oder Leertaste startet beziehungsweise pausiert.</li>
+        <li>Nach dem letzten Timer kehrt die Anwendung automatisch zur gestoppten Startansicht zurück.</li>
+      </ul>
+      <h3>Zeiten eingeben</h3>
+      <ul>
+        <li>Der obere graue Pfeil öffnet Zeiteditor und Einzelscheiben gemeinsam.</li>
+        <li><code>5-30</code> bedeutet 5 Sekunden Vorlauf oder Pause und danach 30 Sekunden Timer.</li>
+        <li>Eine einzelne Zahl wie <code>30</code> bedeutet <code>0-30</code>, also einen Timer ohne vorherige Pause.</li>
+        <li>Beliebig viele Einträge können mit Leerzeichen oder Semikolon getrennt werden.</li>
+        <li>Standard: <code>5-30 30 30 30</code>.</li>
+        <li>Die Zeiten können auch während Lauf oder Pause geändert werden. Mit Enter oder beim Verlassen des Feldes werden sie übernommen.</li>
+      </ul>
+      <h3>Große Scheibe und Ringe</h3>
+      <ul>
+        <li>Die Zahl in der Mitte zeigt die Restzeit der aktuellen Phase. Vor dem Start zeigt sie die Summe aller Timerzeiten ohne Pausen.</li>
+        <li>Der breite Ring zeigt die aktuelle Phase. Timer zählen im Uhrzeigersinn herunter; Vorlauf und Pausen pulsieren.</li>
+        <li>Ein Klick auf den breiten Ring setzt die Position innerhalb der aktuellen Phase.</li>
+        <li>Der dünne Außenring zeigt nur Timerzeiten, keine Pausen. Ein Klick darauf springt zu einer Position im gesamten Timerablauf.</li>
+        <li>Während Vorlauf und Pausen bleibt der Außenring stehen.</li>
+      </ul>
+      <h3>Maximierte Darstellung</h3>
+      <ul>
+        <li>Der Schalter <code>max</code> steht unten links zwischen dem Buchstaben T und den beiden verschiedenfarbigen Ringen.</li>
+        <li>Ein Klick vergrößert die große Timergrafik so weit wie möglich, mit Abstand zum Browserrand.</li>
+        <li>Im Max-Modus lautet der Schalter <code>min</code>. Ein Klick stellt die zuvor geöffnete normale Seite wieder her.</li>
+      </ul>
+      <h3>Einzelscheiben</h3>
+      <ul>
+        <li>Im Editor erhält jeder Timer eine eigene Scheibe mit mittiger Anzeige, breitem Timer-Ring und dünnem Gesamt-Ring.</li>
+        <li>Die Mitte jeder Scheibe startet, pausiert oder setzt fort; Doppelklick setzt zurück.</li>
+        <li>Der breite Ring springt innerhalb des betreffenden Timers, der dünne Ring innerhalb des gesamten Timerablaufs.</li>
+        <li>Vorlauf und Pausen werden in der jeweils nächsten Timer-Scheibe mit Pausenfarbe heruntergezählt.</li>
+        <li>Shift+Klick auf die Mitte einer Scheibe aktiviert die direkte Bearbeitung ihrer Timersekunden. Enter oder Klick daneben speichert, Escape verwirft.</li>
+      </ul>
+      <h3>Farbauswahl</h3>
+      <ul>
+        <li>Der rechte Pfeil neben der Zeiteingabe öffnet die dritte Seite mit allen Timer-Vorschauen.</li>
+        <li>Die Vorschau-Scheiben sind nicht bedienbar; sie dienen ausschließlich der Farbauswahl.</li>
+        <li>Das Farbfeld befindet sich jeweils direkt oberhalb der zugehörigen Timer-Scheibe.</li>
+        <li>Ein Klick auf das jeweilige Farbfeld öffnet die manuelle Auswahl für diesen Timer.</li>
+        <li>Die Startpalette enthält unterschiedliche Farben. Eigene Farben werden in allen Ansichten und beim HTML-Download übernommen.</li>
+      </ul>
+      <h3>Titel und HTML-Datei</h3>
+      <ul>
+        <li>Der Titel kann nur auf der Editorseite angeklickt und bearbeitet werden. Klick daneben oder Enter speichert; Escape verwirft.</li>
+        <li>Ein Doppelklick auf den Titel auf der Editorseite speichert eine eigenständige HTML-Datei.</li>
+        <li>Aktueller Titel, Zeitfolge und eingebettete Audiodatei werden in die heruntergeladene Datei übernommen.</li>
+      </ul>
+      <h3>Eigener Timer-Sound</h3>
+      <ul>
+        <li>Ein Doppelklick auf die beiden verschiedenfarbigen Ringe öffnet die lokale Auswahl für MP3 oder M4A.</li>
+        <li>Ein einfacher Klick schaltet den geladenen Klang ein oder aus.</li>
+        <li>Der Klang wird nach dem natürlichen Ende jeder Timerphase abgespielt, nicht nach Pausen oder manuellen Sprüngen. Während der Soundwiedergabe wartet der Ablauf; erst danach startet die nächste Phase. Nach dem letzten Sound kehrt der Timer zur Startansicht zurück.</li>
+        <li>Die Audiodatei bleibt lokal und wird beim HTML-Download direkt eingebettet.</li>
+      </ul>
+    </div>
+  </dialog>
+  <script>
+    (() => {
+      'use strict';
+      const timeSequence = document.querySelector('#time-sequence');
+      const appTitle = document.querySelector('#app-title');
+      const appMain = document.querySelector('main');
+      const mallardToggle = document.querySelector('#mallard-toggle');
+      const maxToggle = document.querySelector('#max-toggle');
+      const helpToggle = document.querySelector('#help-toggle');
+      const helpDialog = document.querySelector('#help-dialog');
+      const helpClose = document.querySelector('#help-close');
+      const soundFile = document.querySelector('#sound-file');
+      const timerSound = document.querySelector('#timer-sound');
+      const configSummary = document.querySelector('#config-summary');
+      const configEditor = document.querySelector('#config-editor');
+      const configColorsNav = document.querySelector('#config-colors-nav');
+      const openEditorButton = document.querySelector('#open-editor');
+      const closeEditorButton = document.querySelector('#close-editor');
+      const openColorsButton = document.querySelector('#open-colors');
+      const closeColorsButton = document.querySelector('#close-colors');
+      const phaseText = document.querySelector('#phase');
+      const secondsText = document.querySelector('#seconds');
+      const progress = document.querySelector('#progress');
+      const phaseTrack = document.querySelector('#phase-track');
+      const phaseSeekHit = document.querySelector('#phase-seek-hit');
+      const overallSeekHit = document.querySelector('#overall-seek-hit');
+      const overallSegments = document.querySelector('#overall-segments');
+      const overallElapsed = document.querySelector('#overall-elapsed');
+      const controlSurface = document.querySelector('#live');
+      const overallView = document.querySelector('#overall-view');
+      const discView = document.querySelector('#disc-view');
+      const colorView = document.querySelector('#color-view');
+      const timerDiscs = document.querySelector('#timer-discs');
+      const colorDiscs = document.querySelector('#color-discs');
+      const timerColorValues = document.querySelector('#timer-color-values');
+      let phases = [];
+      let phaseIndex = -1;
+      let durationMs = 0;
+      let remainingMs = 0;
+      let totalDurationMs = 0;
+      let totalTimerDurationMs = 0;
+      let endAt = 0;
+      let frameId = 0;
+      let state = 'idle';
+      let tapTimer = 0;
+      let lastTapAt = 0;
+      let pointerStart = null;
+      let timerDiscRefs = [];
+      let lastDiscPhaseIndex = -2;
+      let savedTitle = appTitle.textContent;
+      let customSoundEnabled = true;
+      let mallardClickTimer = 0;
+      let viewBeforeMax = 'start';
+      const defaultTimerColors = [
+        '#d62828', '#f2c94c', '#2e9d50', '#2878c8',
+        '#c2415b', '#2f855a', '#c05621', '#4c51bf',
+        '#00838f', '#9c4221', '#6b46c1', '#2b6cb0'
+      ];
+      let selectedTimerColors = timerColorValues.value
+        .split(',')
+        .map((color) => color.trim())
+        .filter((color) => /^#[0-9a-f]{6}$/i.test(color));
+      function safeSeconds(value) {
+        const number = Number(value.replace(',', '.'));
+        return Number.isFinite(number) ? Math.max(0, Math.floor(number)) : 0;
+      }
+      function generatedTimerColor(index) {
+        if (defaultTimerColors[index]) return defaultTimerColors[index];
+        const hue = (145 + index * 137.508) % 360;
+        const saturation = 58 + (index % 4) * 9;
+        const lightness = 34 + (Math.floor(index / 4) % 5) * 7;
+        const chroma = (1 - Math.abs(2 * lightness / 100 - 1)) * saturation / 100;
+        const section = hue / 60;
+        const x = chroma * (1 - Math.abs(section % 2 - 1));
+        const offset = lightness / 100 - chroma / 2;
+        const channels =
+          section < 1 ? [chroma, x, 0] :
+          section < 2 ? [x, chroma, 0] :
+          section < 3 ? [0, chroma, x] :
+          section < 4 ? [0, x, chroma] :
+          section < 5 ? [x, 0, chroma] : [chroma, 0, x];
+        return `#${channels
+          .map((channel) => Math.round((channel + offset) * 255).toString(16).padStart(2, '0'))
+          .join('')}`;
+      }
+      function ensureTimerColors(count) {
+        while (selectedTimerColors.length < count) {
+          selectedTimerColors.push(generatedTimerColor(selectedTimerColors.length));
+        }
+        timerColorValues.value = selectedTimerColors.join(',');
+      }
+      function timerColor(index) {
+        ensureTimerColors(index + 1);
+        return selectedTimerColors[index];
+      }
+      function updateSoundControl() {
+        const hasAudio = Boolean(timerSound.getAttribute('src'));
+        mallardToggle.classList.toggle('has-audio', hasAudio);
+        mallardToggle.setAttribute('aria-pressed', String(customSoundEnabled));
+        mallardToggle.setAttribute(
+          'aria-label',
+          hasAudio
+            ? `Timer-Sound ${customSoundEnabled ? 'ausschalten' : 'einschalten'}; doppelklicken zum Ersetzen`
+            : 'Noch keine Audiodatei geladen; doppelklicken zum Auswählen'
+        );
+      }
+      let soundWaiting = false;
+      let soundGeneration = 0;
+      let pendingSoundFinish = null;
+      let soundConfigurationChanged = false;
+      function cancelSoundWait() {
+        soundGeneration += 1;
+        soundWaiting = false;
+        pendingSoundFinish = null;
+        soundConfigurationChanged = false;
+        timerSound.pause();
+        timerSound.currentTime = 0;
+      }
+      function finishSoundWait() {
+        if (!soundWaiting || state === 'paused') return;
+        soundGeneration += 1;
+        soundWaiting = false;
+        pendingSoundFinish = null;
+        timerSound.pause();
+        if (state !== 'running') return;
+        if (soundConfigurationChanged) {
+          soundConfigurationChanged = false;
+          applyRunningConfiguration();
+        } else beginNextPhase(performance.now());
+      }
+      function playTimerSound() {
+        if (!customSoundEnabled || !timerSound.getAttribute('src')) return false;
+        soundWaiting = true;
+        const generation = ++soundGeneration;
+        pendingSoundFinish = () => {
+          if (generation === soundGeneration) finishSoundWait();
+        };
+        timerSound.currentTime = 0;
+        phaseText.textContent = 'Sound';
+        timerSound.play().catch(pendingSoundFinish);
+        return true;
+      }
+      timerSound.addEventListener('ended', () => {
+        if (pendingSoundFinish) pendingSoundFinish();
+      });
+      timerSound.addEventListener('error', () => {
+        if (pendingSoundFinish) pendingSoundFinish();
+      });
+      function primeTimerSound() {
+        if (soundWaiting || !timerSound.getAttribute('src')) return;
+        const wasMuted = timerSound.muted;
+        timerSound.muted = true;
+        timerSound.play()
+          .then(() => {
+            timerSound.pause();
+            timerSound.currentTime = 0;
+            timerSound.muted = wasMuted;
+          })
+          .catch(() => { timerSound.muted = wasMuted; });
+      }
+      function configuredPhases() {
+        const parsedEntries = timeSequence.value
+          .trim()
+          .split(/[\s;]+/)
+          .filter(Boolean)
+          .map((entry) => {
+            const pair = entry.match(/^(\d+(?:[.,]\d+)?)\s*-\s*(\d+(?:[.,]\d+)?)$/);
+            const single = entry.match(/^(\d+(?:[.,]\d+)?)$/);
+            if (!pair && !single) return null;
+            return {
+              pauseSeconds: pair ? safeSeconds(pair[1]) : 0,
+              timerSeconds: safeSeconds(pair ? pair[2] : single[1])
+            };
+          })
+          .filter(Boolean);
+        return parsedEntries.flatMap(({ pauseSeconds, timerSeconds }, index) => {
+          const timerNumber = index + 1;
+          return [
+            {
+              label: timerNumber === 1 ? 'Vorlauf' : 'Pause',
+              color: 'var(--between)',
+              isRest: true,
+              milliseconds: pauseSeconds * 1000
+            },
+            {
+              label: `Timer ${timerNumber}`,
+              color: timerColor(index),
+              isRest: false,
+              entryIndex: index,
+              milliseconds: timerSeconds * 1000
+            }
+          ];
+        });
+      }
+      function renderTimerDiscs(sourcePhases) {
+        const fragment = document.createDocumentFragment();
+        timerDiscRefs = [];
+        sourcePhases.forEach((phase, index) => {
+          if (phase.isRest) return;
+          const card = document.createElement('div');
+          card.className = 'timer-disc';
+          const graphic = document.createElement('div');
+          graphic.className = 'timer-disc-graphic';
+          const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+          svg.setAttribute('viewBox', '0 0 120 120');
+          svg.setAttribute('aria-hidden', 'true');
+          const circle = (className, radius, pathLength = false) => {
+            const element = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            element.setAttribute('class', className);
+            element.setAttribute('cx', '60');
+            element.setAttribute('cy', '60');
+            element.setAttribute('r', String(radius));
+            if (pathLength) element.setAttribute('pathLength', '100');
+            return element;
+          };
+          const overallTrack = circle('timer-disc-overall-track', 55);
+          const overallRing = circle('timer-disc-overall-progress', 55, true);
+          const overallHit = circle('timer-disc-hit timer-disc-overall-hit', 55);
+          const phaseTrack = circle('timer-disc-track', 43);
+          const phaseRing = circle('timer-disc-progress', 43, true);
+          const phaseHit = circle('timer-disc-hit timer-disc-phase-hit', 43);
+          phaseRing.style.stroke = phase.color;
+          svg.append(overallTrack, overallRing, overallHit, phaseTrack, phaseRing, phaseHit);
+          const center = document.createElement('div');
+          center.className = 'timer-disc-center';
+          center.tabIndex = 0;
+          center.setAttribute('role', 'button');
+          center.setAttribute(
+            'aria-label',
+            `${phase.label} steuern; Umschalt-Klick auf die Zahl zum Bearbeiten`
+          );
+          const label = document.createElement('span');
+          label.className = 'timer-disc-label';
+          label.textContent = phase.label;
+          const value = document.createElement('span');
+          value.className = 'timer-disc-value';
+          value.textContent = String(Math.ceil(phase.milliseconds / 1000));
+          const unit = document.createElement('span');
+          unit.className = 'timer-disc-unit';
+          unit.textContent = 'Sek.';
+          center.append(label, value, unit);
+          graphic.append(svg, center);
+          card.append(graphic);
+          fragment.append(card);
+          timerDiscRefs.push({
+            card, center, phaseTrack, phaseRing, phaseHit, overallRing, overallHit,
+            label, value, phaseIndex: index, entryIndex: phase.entryIndex, phase
+          });
+        });
+        timerDiscs.replaceChildren(fragment);
+        lastDiscPhaseIndex = -2;
+      }
+      function renderColorDiscs(sourcePhases) {
+        const fragment = document.createDocumentFragment();
+        let timerIndex = 0;
+        sourcePhases.forEach((phase) => {
+          if (phase.isRest) return;
+          const card = document.createElement('div');
+          card.className = 'color-card';
+          const graphic = document.createElement('div');
+          graphic.className = 'color-disc-graphic';
+          const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+          svg.setAttribute('viewBox', '0 0 120 120');
+          svg.setAttribute('aria-hidden', 'true');
+          const circle = (className, radius) => {
+            const element = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            element.setAttribute('class', className);
+            element.setAttribute('cx', '60');
+            element.setAttribute('cy', '60');
+            element.setAttribute('r', String(radius));
+            return element;
+          };
+          const outer = circle('color-disc-outer', 55);
+          const track = circle('color-disc-track', 43);
+          const ring = circle('color-disc-ring', 43);
+          ring.style.stroke = phase.color;
+          svg.append(outer, track, ring);
+          const center = document.createElement('div');
+          center.className = 'color-disc-center';
+          const label = document.createElement('span');
+          label.className = 'color-disc-label';
+          label.textContent = phase.label;
+          const value = document.createElement('span');
+          value.className = 'color-disc-value';
+          value.textContent = String(Math.ceil(phase.milliseconds / 1000));
+          center.append(label, value);
+          graphic.append(svg, center);
+          const picker = document.createElement('input');
+          picker.className = 'color-picker';
+          picker.type = 'color';
+          picker.value = selectedTimerColors[timerIndex];
+          picker.dataset.timerIndex = String(timerIndex);
+          picker.setAttribute('aria-label', `${phase.label} Farbe`);
+          card.append(picker, graphic);
+          fragment.append(card);
+          timerIndex += 1;
+        });
+        colorDiscs.replaceChildren(fragment);
+      }
+      function updateTimerDiscs(phase, remaining, total) {
+        if (lastDiscPhaseIndex !== phaseIndex || state === 'idle' || state === 'done') {
+          timerDiscRefs.forEach((ref) => {
+            const isComplete = state === 'done' || (phaseIndex >= 0 && ref.phaseIndex < phaseIndex);
+            const isActive = phaseIndex === ref.phaseIndex && !phase.isRest && state === 'running';
+            ref.card.classList.toggle('is-complete', isComplete);
+            ref.phaseRing.classList.toggle('is-pulsing', isActive);
+            ref.phaseTrack.classList.toggle('is-pulsing', isActive);
+            ref.phaseRing.style.stroke = ref.phase.color;
+            ref.phaseRing.style.strokeDashoffset = isComplete ? '-100' : '0';
+            ref.label.textContent = ref.phase.label;
+            if (!ref.value.isContentEditable) {
+              ref.value.textContent = isComplete
+                ? '0'
+                : String(Math.ceil(ref.phase.milliseconds / 1000));
+            }
+            const canSeek = state === 'running' || state === 'paused';
+            ref.phaseHit.classList.toggle('can-seek', canSeek);
+            ref.overallHit.classList.toggle('can-seek', canSeek);
+          });
+          lastDiscPhaseIndex = phaseIndex;
+        }
+        const nextTimerRef = phase.isRest
+          ? timerDiscRefs.find((ref) => ref.phaseIndex > phaseIndex)
+          : null;
+        if (nextTimerRef) {
+          const isRunningRest = state === 'running';
+          nextTimerRef.card.classList.remove('is-complete');
+          nextTimerRef.label.textContent = phase.label;
+          if (!nextTimerRef.value.isContentEditable) {
+            nextTimerRef.value.textContent = String(Math.max(0, Math.ceil(remaining / 1000)));
+          }
+          nextTimerRef.phaseRing.style.stroke = phase.color;
+          nextTimerRef.phaseRing.style.strokeDashoffset = '0';
+          nextTimerRef.phaseRing.classList.toggle('is-pulsing', isRunningRest);
+          nextTimerRef.phaseTrack.classList.toggle('is-pulsing', isRunningRest);
+        }
+        if (state === 'paused') {
+          const pausedRef = nextTimerRef ||
+            timerDiscRefs.find((ref) => ref.phaseIndex === phaseIndex);
+          if (pausedRef) pausedRef.label.textContent = 'Pausiert';
+        }
+        const elapsedMs = state === 'running' || state === 'paused'
+          ? phase.timerStartsAtMs + (phase.isRest ? 0 : total - remaining)
+          : state === 'done' ? totalTimerDurationMs : 0;
+        const overallOffset = totalTimerDurationMs > 0
+          ? -100 * Math.max(0, Math.min(1, elapsedMs / totalTimerDurationMs))
+          : 0;
+        timerDiscs.style.setProperty('--disc-overall-offset', String(overallOffset));
+        const activeRef = timerDiscRefs.find((ref) => ref.phaseIndex === phaseIndex);
+        if (activeRef && !phase.isRest && state !== 'done') {
+          const fraction = total > 0 ? remaining / total : 0;
+          activeRef.phaseRing.style.strokeDashoffset = String(-100 * (1 - fraction));
+          if (!activeRef.value.isContentEditable) {
+            activeRef.value.textContent = String(Math.max(0, Math.ceil(remaining / 1000)));
+          }
+        }
+      }
+      function updateOverallSegments(sourcePhases) {
+        const visiblePhases = sourcePhases.filter(
+          (phase) => !phase.isRest && phase.milliseconds > 0
+        );
+        const total = visiblePhases.reduce((sum, phase) => sum + phase.milliseconds, 0);
+        overallSegments.replaceChildren();
+        if (total <= 0) return;
+        let startPercent = 0;
+        const fragment = document.createDocumentFragment();
+        visiblePhases.forEach((phase) => {
+          const lengthPercent = (phase.milliseconds / total) * 100;
+          const startAngle = (startPercent / 100) * Math.PI * 2;
+          const endAngle = ((startPercent + lengthPercent) / 100) * Math.PI * 2;
+          const startX = 140 + 132 * Math.cos(startAngle);
+          const startY = 140 + 132 * Math.sin(startAngle);
+          const endX = 140 + 132 * Math.cos(endAngle);
+          const endY = 140 + 132 * Math.sin(endAngle);
+          const segment = document.createElementNS(
+            'http://www.w3.org/2000/svg',
+            lengthPercent >= 99.999 ? 'circle' : 'path'
+          );
+          segment.setAttribute('class', 'overall-segment');
+          if (lengthPercent >= 99.999) {
+            segment.setAttribute('cx', '140');
+            segment.setAttribute('cy', '140');
+            segment.setAttribute('r', '132');
+          } else {
+            segment.setAttribute(
+              'd',
+              `M ${startX} ${startY} A 132 132 0 ${lengthPercent > 50 ? 1 : 0} 1 ${endX} ${endY}`
+            );
+          }
+          segment.style.stroke = phase.color;
+          fragment.append(segment);
+          startPercent += lengthPercent;
+        });
+        overallSegments.append(fragment);
+      }
+      function preparePhases(sourcePhases) {
+        phases = sourcePhases;
+        totalDurationMs = 0;
+        totalTimerDurationMs = 0;
+        phases.forEach((phase) => {
+          phase.startsAtMs = totalDurationMs;
+          phase.timerStartsAtMs = totalTimerDurationMs;
+          totalDurationMs += phase.milliseconds;
+          if (!phase.isRest) totalTimerDurationMs += phase.milliseconds;
+        });
+      }
+      function setEditorOpen(open) {
+        if (!open) finishTitleEdit(true);
+        configSummary.hidden = open;
+        configEditor.hidden = !open;
+        configColorsNav.hidden = true;
+        overallView.hidden = open;
+        discView.hidden = !open;
+        colorView.hidden = true;
+        openEditorButton.setAttribute('aria-expanded', String(open));
+        appTitle.classList.toggle('is-editable', open);
+        if (open) {
+          appTitle.tabIndex = 0;
+          appTitle.setAttribute(
+            'aria-label',
+            'Titel anklicken zum Bearbeiten, doppelklicken zum Speichern als HTML-Datei'
+          );
+        } else {
+          appTitle.removeAttribute('tabindex');
+          appTitle.removeAttribute('aria-label');
+        }
+        if (open) timeSequence.focus();
+        else openEditorButton.focus();
+      }
+      function setColorViewOpen(open) {
+        if (open) finishTitleEdit(true);
+        configSummary.hidden = true;
+        configEditor.hidden = open;
+        configColorsNav.hidden = !open;
+        overallView.hidden = true;
+        discView.hidden = open;
+        colorView.hidden = !open;
+        openColorsButton.setAttribute('aria-expanded', String(open));
+        if (open) closeColorsButton.focus();
+        else timeSequence.focus();
+      }
+      function currentNormalView() {
+        if (!colorView.hidden) return 'colors';
+        if (!discView.hidden) return 'editor';
+        return 'start';
+      }
+      function restoreNormalView(view) {
+        if (view === 'colors') {
+          setEditorOpen(true);
+          setColorViewOpen(true);
+        } else if (view === 'editor') {
+          setEditorOpen(true);
+        } else {
+          setEditorOpen(false);
+        }
+      }
+      function setMaxMode(maximized) {
+        if (maximized) {
+          viewBeforeMax = currentNormalView();
+          finishTitleEdit(true);
+          appMain.classList.add('max-mode');
+          overallView.hidden = false;
+          discView.hidden = true;
+          colorView.hidden = true;
+          maxToggle.textContent = 'min';
+          maxToggle.setAttribute('aria-label', 'Normale Darstellung wiederherstellen');
+          maxToggle.setAttribute('title', 'Normale Darstellung wiederherstellen');
+          maxToggle.setAttribute('aria-pressed', 'true');
+        } else {
+          appMain.classList.remove('max-mode');
+          maxToggle.textContent = 'max';
+          maxToggle.setAttribute('aria-label', 'Timer maximieren');
+          maxToggle.setAttribute('title', 'Timer maximieren');
+          maxToggle.setAttribute('aria-pressed', 'false');
+          restoreNormalView(viewBeforeMax);
+          maxToggle.focus();
+        }
+      }
+      function beginTitleEdit() {
+        if (configEditor.hidden) return;
+        if (appTitle.isContentEditable) return;
+        savedTitle = appTitle.textContent.trim() || 'Glücks-Timer';
+        appTitle.contentEditable = 'true';
+        appTitle.focus();
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(appTitle);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+      function finishTitleEdit(save = true) {
+        if (!appTitle.isContentEditable) return;
+        const editedTitle = appTitle.textContent.replace(/\s+/g, ' ').trim();
+        appTitle.textContent = save && editedTitle ? editedTitle : savedTitle;
+        savedTitle = appTitle.textContent;
+        document.title = savedTitle;
+        appTitle.contentEditable = 'false';
+      }
+      function updateTimerEntry(entryIndex, seconds) {
+        const entries = timeSequence.value.trim().split(/[\s;]+/).filter(Boolean);
+        let validIndex = -1;
+        for (let index = 0; index < entries.length; index += 1) {
+          const pair = entries[index].match(/^(\d+(?:[.,]\d+)?)\s*-\s*(\d+(?:[.,]\d+)?)$/);
+          const single = entries[index].match(/^(\d+(?:[.,]\d+)?)$/);
+          if (!pair && !single) continue;
+          validIndex += 1;
+          if (validIndex !== entryIndex) continue;
+          entries[index] = pair ? `${pair[1]}-${seconds}` : String(seconds);
+          break;
+        }
+        timeSequence.value = entries.join(' ');
+        timeSequence.dispatchEvent(new Event('input', { bubbles: true }));
+        timeSequence.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      function beginTimerValueEdit(ref) {
+        if (ref.value.isContentEditable) return;
+        ref.value.dataset.savedValue = ref.value.textContent;
+        ref.value.contentEditable = 'true';
+        ref.value.focus();
+        const selection = window.getSelection();
+        const range = document.createRange();
+        range.selectNodeContents(ref.value);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+      function finishTimerValueEdit(valueElement, save = true) {
+        if (!valueElement.isContentEditable) return;
+        const ref = timerDiscRefs.find((item) => item.value === valueElement);
+        const savedValue = valueElement.dataset.savedValue || '0';
+        const parsed = Number(valueElement.textContent.trim());
+        const seconds = Number.isFinite(parsed) ? Math.max(0, Math.floor(parsed)) : Number(savedValue);
+        valueElement.contentEditable = 'false';
+        delete valueElement.dataset.savedValue;
+        if (save && ref) updateTimerEntry(ref.entryIndex, seconds);
+        else valueElement.textContent = savedValue;
+      }
+      function downloadCurrentHtml() {
+        finishTitleEdit(true);
+        const cleanDocument = document.documentElement.cloneNode(true);
+        const cleanTitle = savedTitle || 'Glücks-Timer';
+        const configured = configuredPhases();
+        const timerTotalSeconds = configured
+          .filter((phase) => !phase.isRest)
+          .reduce((sum, phase) => sum + phase.milliseconds, 0) / 1000;
+        cleanDocument.querySelector('title').textContent = cleanTitle;
+        const cleanHeading = cleanDocument.querySelector('#app-title');
+        cleanHeading.textContent = cleanTitle;
+        cleanHeading.setAttribute('contenteditable', 'false');
+        const cleanInput = cleanDocument.querySelector('#time-sequence');
+        cleanInput.setAttribute('value', timeSequence.value);
+        cleanInput.removeAttribute('disabled');
+        cleanDocument.querySelector('#open-editor').removeAttribute('disabled');
+        cleanDocument.querySelector('#config-summary').removeAttribute('hidden');
+        cleanDocument.querySelector('#config-editor').setAttribute('hidden', '');
+        cleanDocument.querySelector('#config-colors-nav').setAttribute('hidden', '');
+        cleanDocument.querySelector('#overall-view').removeAttribute('hidden');
+        cleanDocument.querySelector('#disc-view').setAttribute('hidden', '');
+        cleanDocument.querySelector('#color-view').setAttribute('hidden', '');
+        cleanDocument.querySelector('#phase').textContent = 'Gesamt Timer';
+        cleanDocument.querySelector('#seconds').textContent = String(timerTotalSeconds);
+        cleanDocument.querySelector('#overall-segments').replaceChildren();
+        cleanDocument.querySelector('#timer-discs').replaceChildren();
+        cleanDocument.querySelector('#progress').removeAttribute('style');
+        cleanDocument.querySelector('#progress').classList.remove('is-pulsing', 'is-counting-pulse');
+        cleanDocument.querySelector('#phase-track').classList.remove('is-counting-pulse');
+        cleanDocument.querySelector('#overall-elapsed').removeAttribute('style');
+        cleanDocument.querySelector('#help-dialog').removeAttribute('open');
+        const cleanMain = cleanDocument.querySelector('main');
+        cleanMain.classList.remove('max-mode');
+        const cleanMax = cleanDocument.querySelector('#max-toggle');
+        cleanMax.textContent = 'max';
+        cleanMax.setAttribute('aria-label', 'Timer maximieren');
+        cleanMax.setAttribute('title', 'Timer maximieren');
+        cleanMax.setAttribute('aria-pressed', 'false');
+        const cleanAudio = cleanDocument.querySelector('#timer-sound');
+        const currentAudioSource = timerSound.getAttribute('src');
+        if (currentAudioSource) cleanAudio.setAttribute('src', currentAudioSource);
+        else cleanAudio.removeAttribute('src');
+        const cleanMallard = cleanDocument.querySelector('#mallard-toggle');
+        cleanMallard.setAttribute('aria-pressed', String(customSoundEnabled));
+        cleanMallard.classList.toggle('has-audio', Boolean(currentAudioSource));
+        cleanDocument.querySelector('#timer-color-values')
+          .setAttribute('value', selectedTimerColors.join(','));
+        const source = `<!doctype html>\n${cleanDocument.outerHTML}`;
+        const blob = new Blob([source], { type: 'text/html;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const download = document.createElement('a');
+        const safeName = cleanTitle
+          .replace(/[<>:"/\\\|?*\u0000-\u001F]/g, '')
+          .trim()
+          .replace(/\s+/g, '-') || 'gluecks-timer';
+        download.href = url;
+        download.download = `${safeName}.html`;
+        document.body.append(download);
+        download.click();
+        download.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 0);
+      }
+      function show(phase, remaining, total) {
+        const fraction = total > 0 ? Math.max(0, Math.min(1, remaining / total)) : 0;
+        const secondsValue = Math.max(0, Math.ceil(remaining / 1000));
+        phaseText.textContent = phase.label;
+        secondsText.textContent = String(secondsValue);
+        secondsText.classList.remove('digits-3', 'digits-4', 'digits-5-plus');
+        const sizeClass =
+          secondsValue >= 10000 ? 'digits-5-plus' :
+          secondsValue >= 1000 ? 'digits-4' :
+          secondsValue >= 100 ? 'digits-3' : '';
+        if (sizeClass) secondsText.classList.add(sizeClass);
+        progress.style.stroke = phase.color;
+        const canSeek = state === 'running' || state === 'paused';
+        phaseSeekHit.classList.toggle('can-seek', canSeek && phase.label !== 'Fertig');
+        overallSeekHit.classList.toggle('can-seek', canSeek && phase.label !== 'Fertig');
+        const isActivelyRunning = state === 'running' && !soundWaiting;
+        progress.classList.toggle('is-pulsing', phase.isRest && isActivelyRunning);
+        progress.classList.toggle(
+          'is-counting-pulse',
+          !phase.isRest && phase.label !== 'Fertig' && isActivelyRunning
+        );
+        phaseTrack.classList.toggle(
+          'is-counting-pulse',
+          !phase.isRest && phase.label !== 'Fertig' && isActivelyRunning
+        );
+        progress.style.strokeDashoffset = phase.isRest ? '0' : String(-100 * (1 - fraction));
+        updateTimerDiscs(phase, remaining, total);
+        if (state === 'running' || state === 'paused') {
+          const elapsedMs = phase.timerStartsAtMs + (phase.isRest ? 0 : total - remaining);
+          const elapsedPercent = totalTimerDurationMs > 0
+            ? 100 * Math.max(0, Math.min(1, elapsedMs / totalTimerDurationMs))
+            : 0;
+          overallElapsed.style.strokeDasharray = `${elapsedPercent} ${100 - elapsedPercent}`;
+        } else if (phase.label === 'Fertig') {
+          overallElapsed.style.strokeDasharray = '100 0';
+        } else {
+          overallElapsed.style.strokeDasharray = '0 100';
+        }
+      }
+      function preview() {
+        const configured = configuredPhases();
+        const timerTotalMs = configured
+          .filter((phase) => !phase.isRest)
+          .reduce((sum, phase) => sum + phase.milliseconds, 0);
+        updateOverallSegments(configured);
+        renderTimerDiscs(configured);
+        renderColorDiscs(configured);
+        show(
+          { label: 'Gesamt Timer', color: 'var(--work)', isRest: false },
+          timerTotalMs,
+          timerTotalMs || 1
+        );
+      }
+      function finish() {
+        setEditorOpen(false);
+        reset();
+      }
+      function beginNextPhase(now) {
+        phaseIndex += 1;
+        while (phaseIndex < phases.length && phases[phaseIndex].milliseconds === 0) phaseIndex += 1;
+        if (phaseIndex >= phases.length) {
+          finish();
+          return;
+        }
+        durationMs = phases[phaseIndex].milliseconds;
+        remainingMs = durationMs;
+        endAt = now + durationMs;
+        show(phases[phaseIndex], remainingMs, durationMs);
+        frameId = requestAnimationFrame(tick);
+      }
+      function tick(now) {
+        if (state !== 'running' || soundWaiting) return;
+        remainingMs = Math.max(0, endAt - now);
+        show(phases[phaseIndex], remainingMs, durationMs);
+        if (remainingMs <= 0) {
+          if (!phases[phaseIndex].isRest && playTimerSound()) return;
+          beginNextPhase(now);
+        }
+        else frameId = requestAnimationFrame(tick);
+      }
+      function start() {
+        cancelSoundWait();
+        cancelAnimationFrame(frameId);
+        if (discView.hidden) setEditorOpen(false);
+        preparePhases(configuredPhases());
+        updateOverallSegments(phases);
+        renderTimerDiscs(phases);
+        renderColorDiscs(phases);
+        phaseIndex = -1;
+        state = 'running';
+        beginNextPhase(performance.now());
+      }
+      function togglePause() {
+        if (soundWaiting) {
+          if (state === 'running') {
+            state = 'paused';
+            timerSound.pause();
+            phaseText.textContent = 'Pausiert';
+          } else if (state === 'paused') {
+            state = 'running';
+            phaseText.textContent = 'Sound';
+            if (timerSound.ended || timerSound.error || !customSoundEnabled) finishSoundWait();
+            else timerSound.play().catch(pendingSoundFinish);
+          }
+          return;
+        }
+        if (state === 'running') {
+          remainingMs = Math.max(0, endAt - performance.now());
+          cancelAnimationFrame(frameId);
+          state = 'paused';
+          lastDiscPhaseIndex = -2;
+          show(phases[phaseIndex], remainingMs, durationMs);
+          phaseText.textContent = 'Pausiert';
+        } else if (state === 'paused') {
+          state = 'running';
+          endAt = performance.now() + remainingMs;
+          lastDiscPhaseIndex = -2;
+          show(phases[phaseIndex], remainingMs, durationMs);
+          frameId = requestAnimationFrame(tick);
+        }
+      }
+      function reset() {
+        cancelSoundWait();
+        cancelAnimationFrame(frameId);
+        state = 'idle';
+        phases = [];
+        phaseIndex = -1;
+        totalDurationMs = 0;
+        totalTimerDurationMs = 0;
+        preview();
+      }
+      function applyRunningConfiguration() {
+        if (soundWaiting) { soundConfigurationChanged = true; return; }
+        if (state !== 'running' && state !== 'paused') return;
+        const wasRunning = state === 'running';
+        const now = performance.now();
+        const currentRemaining = wasRunning
+          ? Math.max(0, endAt - now)
+          : remainingMs;
+        const elapsedInPhase = Math.max(0, durationMs - currentRemaining);
+        const currentIndex = phaseIndex;
+        const newPhases = configuredPhases();
+        if (newPhases.length === 0) {
+          finish();
+          return;
+        }
+        cancelAnimationFrame(frameId);
+        preparePhases(newPhases);
+        updateOverallSegments(phases);
+        renderTimerDiscs(phases);
+        renderColorDiscs(phases);
+        phaseIndex = Math.min(currentIndex, phases.length - 1);
+        while (phaseIndex < phases.length && phases[phaseIndex].milliseconds === 0) {
+          phaseIndex += 1;
+        }
+        if (phaseIndex >= phases.length) {
+          finish();
+          return;
+        }
+        durationMs = phases[phaseIndex].milliseconds;
+        remainingMs = Math.max(0, durationMs - elapsedInPhase);
+        if (remainingMs <= 0) {
+          phaseIndex -= 1;
+          state = wasRunning ? 'running' : 'paused';
+          beginNextPhase(now);
+          if (!wasRunning && state !== 'done') {
+            cancelAnimationFrame(frameId);
+            state = 'paused';
+            show(phases[phaseIndex], remainingMs, durationMs);
+            phaseText.textContent = 'Pausiert';
+          }
+          return;
+        }
+        state = wasRunning ? 'running' : 'paused';
+        endAt = now + remainingMs;
+        lastDiscPhaseIndex = -2;
+        show(phases[phaseIndex], remainingMs, durationMs);
+        if (wasRunning) frameId = requestAnimationFrame(tick);
+        else phaseText.textContent = 'Pausiert';
+      }
+      function toggleFromDial() {
+        primeTimerSound();
+        if (state === 'idle' || state === 'done') start();
+        else togglePause();
+      }
+      function resetFromDial() {
+        window.clearTimeout(tapTimer);
+        lastTapAt = 0;
+        reset();
+      }
+      function registerTap() {
+        const now = performance.now();
+        if (now - lastTapAt <= 330) {
+          resetFromDial();
+          return;
+        }
+        lastTapAt = now;
+        window.clearTimeout(tapTimer);
+        tapTimer = window.setTimeout(() => {
+          lastTapAt = 0;
+          toggleFromDial();
+        }, 340);
+      }
+      function clickFraction(event, hitArea) {
+        const rect = hitArea.ownerSVGElement.getBoundingClientRect();
+        const dx = event.clientX - (rect.left + rect.width / 2);
+        const dy = event.clientY - (rect.top + rect.height / 2);
+        return (Math.atan2(dx, -dy) + Math.PI * 2) % (Math.PI * 2) / (Math.PI * 2);
+      }
+      function continueFromPosition() {
+        cancelSoundWait();
+        cancelAnimationFrame(frameId);
+        state = 'running';
+        endAt = performance.now() + remainingMs;
+        show(phases[phaseIndex], remainingMs, durationMs);
+        frameId = requestAnimationFrame(tick);
+      }
+      function seekPhase(targetPhaseIndex, fraction) {
+        if (
+          (state !== 'running' && state !== 'paused') ||
+          !phases[targetPhaseIndex] ||
+          phases[targetPhaseIndex].isRest
+        ) return;
+        phaseIndex = targetPhaseIndex;
+        durationMs = phases[phaseIndex].milliseconds;
+        remainingMs = durationMs * (1 - fraction);
+        continueFromPosition();
+      }
+      function seekOverall(fraction) {
+        if ((state !== 'running' && state !== 'paused') || totalTimerDurationMs <= 0) return;
+        const targetElapsedMs = totalTimerDurationMs * fraction;
+        const targetIndex = phases.findIndex(
+          (phase) => !phase.isRest && phase.milliseconds > 0 &&
+            targetElapsedMs < phase.timerStartsAtMs + phase.milliseconds
+        );
+        if (targetIndex < 0) return;
+        phaseIndex = targetIndex;
+        durationMs = phases[phaseIndex].milliseconds;
+        remainingMs = durationMs - (targetElapsedMs - phases[phaseIndex].timerStartsAtMs);
+        continueFromPosition();
+      }
+      phaseSeekHit.addEventListener('click', (event) => {
+        seekPhase(phaseIndex, clickFraction(event, phaseSeekHit));
+      });
+      overallSeekHit.addEventListener('click', (event) => {
+        seekOverall(clickFraction(event, overallSeekHit));
+      });
+      timerDiscs.addEventListener('click', (event) => {
+        const editCenter = event.target.closest('.timer-disc-center');
+        if (event.shiftKey && editCenter) {
+          event.preventDefault();
+          const valueRef = timerDiscRefs.find((item) => item.center === editCenter);
+          if (valueRef) beginTimerValueEdit(valueRef);
+          return;
+        }
+        const ref = timerDiscRefs.find((item) =>
+          item.phaseHit === event.target || item.overallHit === event.target
+        );
+        if (!ref) return;
+        if (event.target === ref.phaseHit) {
+          seekPhase(ref.phaseIndex, clickFraction(event, ref.phaseHit));
+        } else {
+          seekOverall(clickFraction(event, ref.overallHit));
+        }
+      });
+      timerDiscs.addEventListener('pointerdown', (event) => {
+        const editCenter = event.target.closest('.timer-disc-center');
+        if (event.shiftKey && editCenter) {
+          event.preventDefault();
+          event.stopPropagation();
+          pointerStart = null;
+          const valueRef = timerDiscRefs.find((item) => item.center === editCenter);
+          if (valueRef) beginTimerValueEdit(valueRef);
+          return;
+        }
+        if (event.target.closest('.timer-disc-value[contenteditable="true"]')) {
+          pointerStart = null;
+          return;
+        }
+        if (!event.target.closest('.timer-disc-center')) return;
+        pointerStart = { id: event.pointerId, x: event.clientX, y: event.clientY };
+      });
+      timerDiscs.addEventListener('pointerup', (event) => {
+        if (
+          event.shiftKey ||
+          event.target.closest('.timer-disc-value[contenteditable="true"]') ||
+          !event.target.closest('.timer-disc-center') ||
+          !pointerStart ||
+          pointerStart.id !== event.pointerId
+        ) return;
+        const moved = Math.hypot(event.clientX - pointerStart.x, event.clientY - pointerStart.y);
+        pointerStart = null;
+        if (moved <= 12) registerTap();
+      });
+      timerDiscs.addEventListener('pointercancel', () => { pointerStart = null; });
+      timerDiscs.addEventListener('keydown', (event) => {
+        const valueElement = event.target.closest('.timer-disc-value[contenteditable="true"]');
+        if (valueElement) {
+          if (event.key === 'Enter') {
+            event.preventDefault();
+            valueElement.blur();
+          } else if (event.key === 'Escape') {
+            event.preventDefault();
+            finishTimerValueEdit(valueElement, false);
+            valueElement.blur();
+          }
+          return;
+        }
+        if (
+          !event.target.closest('.timer-disc-center') ||
+          (event.key !== 'Enter' && event.key !== ' ')
+        ) return;
+        event.preventDefault();
+        toggleFromDial();
+      });
+      timerDiscs.addEventListener('focusout', (event) => {
+        const valueElement = event.target.closest('.timer-disc-value[contenteditable="true"]');
+        if (valueElement) finishTimerValueEdit(valueElement, true);
+      });
+      controlSurface.addEventListener('pointerdown', (event) => {
+        pointerStart = { id: event.pointerId, x: event.clientX, y: event.clientY };
+      });
+      controlSurface.addEventListener('pointerup', (event) => {
+        if (!pointerStart || pointerStart.id !== event.pointerId) return;
+        const moved = Math.hypot(event.clientX - pointerStart.x, event.clientY - pointerStart.y);
+        pointerStart = null;
+        if (moved <= 12) registerTap();
+      });
+      controlSurface.addEventListener('pointercancel', () => { pointerStart = null; });
+      controlSurface.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault();
+          toggleFromDial();
+        }
+      });
+      timeSequence.addEventListener('input', () => {
+        if (state === 'idle') preview();
+      });
+      timeSequence.addEventListener('change', applyRunningConfiguration);
+      timeSequence.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        timeSequence.blur();
+      });
+      colorDiscs.addEventListener('change', (event) => {
+        const picker = event.target.closest('.color-picker');
+        if (!picker) return;
+        const index = Number(picker.dataset.timerIndex);
+        if (!Number.isInteger(index) || index < 0) return;
+        selectedTimerColors[index] = picker.value.toLowerCase();
+        timerColorValues.value = selectedTimerColors.join(',');
+        if (state === 'running' || state === 'paused') applyRunningConfiguration();
+        else preview();
+      });
+      openEditorButton.addEventListener('click', () => setEditorOpen(true));
+      closeEditorButton.addEventListener('click', () => setEditorOpen(false));
+      openColorsButton.addEventListener('click', () => setColorViewOpen(true));
+      closeColorsButton.addEventListener('click', () => setColorViewOpen(false));
+      maxToggle.addEventListener('click', () => {
+        setMaxMode(!appMain.classList.contains('max-mode'));
+      });
+      helpToggle.addEventListener('click', () => helpDialog.showModal());
+      helpClose.addEventListener('click', () => helpDialog.close());
+      helpDialog.addEventListener('click', (event) => {
+        if (event.target === helpDialog) helpDialog.close();
+      });
+      mallardToggle.addEventListener('click', () => {
+        window.clearTimeout(mallardClickTimer);
+        mallardClickTimer = window.setTimeout(() => {
+          customSoundEnabled = !customSoundEnabled;
+          if (!customSoundEnabled) {
+            timerSound.pause();
+            timerSound.currentTime = 0;
+            if (soundWaiting) finishSoundWait();
+          } else {
+            primeTimerSound();
+          }
+          updateSoundControl();
+        }, 280);
+      });
+      mallardToggle.addEventListener('dblclick', (event) => {
+        event.preventDefault();
+        window.clearTimeout(mallardClickTimer);
+        soundFile.click();
+      });
+      soundFile.addEventListener('change', () => {
+        const file = soundFile.files?.[0];
+        if (!file) return;
+        const lowerName = file.name.toLowerCase();
+        const isSupportedAudio =
+          lowerName.endsWith('.mp3') ||
+          lowerName.endsWith('.m4a') ||
+          file.type === 'audio/mpeg' ||
+          file.type === 'audio/mp4' ||
+          file.type === 'audio/x-m4a';
+        if (!isSupportedAudio) {
+          soundFile.value = '';
+          return;
+        }
+        const reader = new FileReader();
+        reader.addEventListener('load', () => {
+          const resumeAfterReplacement = soundWaiting;
+          timerSound.src = String(reader.result);
+          timerSound.load();
+          customSoundEnabled = true;
+          if (resumeAfterReplacement) finishSoundWait();
+          updateSoundControl();
+        });
+        reader.readAsDataURL(file);
+      });
+      appTitle.addEventListener('click', beginTitleEdit);
+      appTitle.addEventListener('dblclick', (event) => {
+        if (configEditor.hidden) return;
+        event.preventDefault();
+        downloadCurrentHtml();
+      });
+      appTitle.addEventListener('keydown', (event) => {
+        if (
+          !configEditor.hidden &&
+          !appTitle.isContentEditable &&
+          (event.key === 'Enter' || event.key === ' ')
+        ) {
+          event.preventDefault();
+          beginTitleEdit();
+        } else if (appTitle.isContentEditable && event.key === 'Enter') {
+          event.preventDefault();
+          appTitle.blur();
+        } else if (appTitle.isContentEditable && event.key === 'Escape') {
+          event.preventDefault();
+          finishTitleEdit(false);
+          appTitle.blur();
+        }
+      });
+      appTitle.addEventListener('blur', () => finishTitleEdit(true));
+      customSoundEnabled = mallardToggle.getAttribute('aria-pressed') !== 'false';
+      updateSoundControl();
+      preview();
+    })();
+  </script>
+
+
+
+</body></html>
